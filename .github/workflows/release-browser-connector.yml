@@ -1,0 +1,85 @@
+name: Release Browser Connector
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**'
+      - '!README.md'
+      - '!PROTOCOL.md'
+      - '!PRIVACY.md'
+      - '!LICENSE'
+      - '!.github/**'
+
+concurrency:
+  group: browser-connector-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout merged revision
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Validate release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
+          if [[ ! "$MANIFEST_VERSION" =~ ^[0-9]+(\.[0-9]+){1,3}$ ]]; then
+            echo "::error::Invalid extension version: $MANIFEST_VERSION"
+            exit 1
+          fi
+
+          RELEASE_TAG="browser-connector-v$MANIFEST_VERSION"
+          if git show-ref --tags --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            echo "::error::Release tag $RELEASE_TAG already exists. Bump extension/manifest.json version before merging another extension release."
+            exit 1
+          fi
+
+          echo "version=$MANIFEST_VERSION" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "archive=aux4-browser-connector-$MANIFEST_VERSION.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Package extension
+        env:
+          ARCHIVE: ${{ steps.version.outputs.archive }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          zip -qr "dist/$ARCHIVE" . \
+            -x 'README.md' 'PROTOCOL.md' 'PRIVACY.md' 'LICENSE' '.gitignore' \
+               '*.DS_Store' '.git/*' '.github/*' 'dist/*'
+
+          unzip -t "dist/$ARCHIVE"
+          MANIFEST_COUNT=$(unzip -Z1 "dist/$ARCHIVE" | grep -Ec '(^|/)manifest.json$' || true)
+          if [ "$MANIFEST_COUNT" -ne 1 ] || ! unzip -Z1 "dist/$ARCHIVE" | grep -Fxq 'manifest.json'; then
+            echo "::error::The package must contain exactly one root manifest.json"
+            exit 1
+          fi
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARCHIVE: ${{ steps.version.outputs.archive }}
+          VERSION: ${{ steps.version.outputs.version }}
+          RELEASE_TAG: ${{ steps.version.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" "dist/$ARCHIVE" \
+            --target "${GITHUB_SHA}" \
+            --title "aux4 Browser Connector $VERSION" \
+            --generate-notes

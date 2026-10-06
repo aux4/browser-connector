@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "aux4 Browser Connector",
+  "version": "0.2.0",
+  "description": "Connect aux4 to your existing browser windows and signed-in sessions through a local connection.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": ["scripting", "tabs", "storage", "alarms", "cookies", "downloads"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "action": {
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png"
+    },
+    "default_popup": "popup.html",
+    "default_title": "Connect aux4 to your browser"
+  }
+}
